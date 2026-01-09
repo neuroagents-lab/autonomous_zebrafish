@@ -1,0 +1,55 @@
+# === Unity Mujoco Envs ===
+# Tuned by TPE, n_timesteps is just a large number we use for training steps
+swimmer3_novision_unity:
+  n_timesteps: !!float 5e6
+  policy: 'MlpPolicy'
+  batch_size: 128
+  n_steps: 8
+  gamma: 0.995
+  learning_rate: 0.015476390421380323
+  ent_coef: 0.0015027038152052267
+  clip_range: 0.4
+  n_epochs: 20
+  gae_lambda: 0.92
+  max_grad_norm: 5
+  vf_coef: 0.953483559272719
+  policy_kwargs: "dict(ortho_init=False,
+                       activation_fn=nn.ReLU,
+                       net_arch=dict(pi=[256, 256], vf=[256, 256])
+                       )"
+
+swimmer3_novision_1000maxsteps_unity:
+  n_timesteps: !!float 5e6
+  policy: 'MlpPolicy'
+  batch_size: 256
+  n_steps: 64
+  gamma: 0.999
+  learning_rate: 0.00010481785704985135
+  ent_coef: !!float 3.5396150740112456e-07
+  clip_range: 0.4
+  n_epochs: 5
+  gae_lambda: 0.99
+  max_grad_norm: 0.6
+  vf_coef: 0.9536996457033595
+  policy_kwargs: "dict(ortho_init=False,
+                       activation_fn=nn.ReLU,
+                       net_arch=dict(pi=[256, 256], vf=[256, 256])
+                       )"
+
+moveforward_swimmer3_novision_unity:
+  n_timesteps: !!float 1e6
+  policy: 'MlpPolicy'
+  batch_size: 8
+  n_steps: 64
+  gamma: 0.98
+  learning_rate: 0.0003275418956552938
+  ent_coef: !!float 7.911786296764566e-07
+  clip_range: 0.3
+  n_epochs: 5
+  gae_lambda: 0.92
+  max_grad_norm: 1
+  vf_coef: 0.5363846361791171
+  policy_kwargs: "dict(ortho_init=False,
+                       activation_fn=nn.ReLU,
+                       net_arch=dict(pi=[256, 256], vf=[256, 256])
+                       )"

@@ -1,0 +1,170 @@
+job_id: null
+load_dmc_agent: false
+training_device: cuda
+checkpointing: false
+wm_checkpointing: false
+
+total_timesteps: 1000000
+parallel: true
+n_train_envs: 64
+seed: 1234
+n_frames: 2 # DO NOT MODIFY
+n_steps: 2048
+batch_mod: 512
+batch_size: ${eval:'${n_steps} * ${n_train_envs} // ${batch_mod}'} 
+learning_rate: 0.0001
+n_epochs: 3
+use_flow: false
+vf_coef: 0.5
+
+name: drift
+cnn_output_dim: 256
+mlp_output_dim: 64
+action_dim: 5
+feature_dim: ${eval:'${cnn_output_dim} + ${mlp_output_dim} + 25'}
+drift_force: 0.0
+
+reward_type: progress
+mmm_progress_horizon: 0.99
+learning_progress_horizon: 0.99
+cycle_horizon: 200
+
+ir_scale: 0.0
+er_scale: 1.0
+ap_scale: 0.0
+wm_path: null
+policy_path: null
+world_model_class: mlp
+
+env_name: drift
+run_name: ${name}-${now:%Y-%m-%d_%H-%M-%S}-${job_id}
+log_dir: null
+log_subdir: ${log_dir}/${run_name} 
+checkpoint_path: ${log_subdir}/checkpoints
+tb_log_dir: ${log_subdir}/tensorboard
+monitor_dir: ${log_subdir}/monitor
+best_model_path: ${log_subdir}/best_model
+eval_path: ${log_subdir}/eval_logs
+wm_checkpoint_path: ${log_subdir}/wm_checkpoints
+
+checkpoint_save_freq: 1000000
+checkpoint_freq: ${eval:'${checkpoint_save_freq} // ${n_train_envs}'}
+
+base_environment:
+  _target_: zfa_rl_agent.core.environments.zebrafish.swimmer_venv
+  parallel: ${parallel}
+  n_envs: ${n_train_envs}
+  seed: ${seed}
+  monitor_dir: ${monitor_dir}
+  force_magnitude: ${drift_force}
+
+curiosity_environment:
+  _target_: zfa_rl_agent.core.environments.curiosity_venv_wrapper.curiosity_venv
+  venv: ${base_environment}
+  feature_size: ${feature_dim}
+  action_size: ${action_dim}
+  world_model_class: ${world_model_class}
+  world_model_kwargs:
+    device: ${training_device}
+  curiosity_env_kwargs:
+    reward_type: ${reward_type}
+    scale_task_reward: ${er_scale}
+    scale_surrogate_reward: ${ir_scale}
+    scale_action_penalty: ${ap_scale}
+    action_history: 200
+    passive_threshold: 0.3
+    exploration_reward_min_step: 10000
+    checkpoint_path: ${log_subdir}
+    checkpoint_freq: ${eval:'${n_steps} * ${n_train_envs}'} # 64000 (updates every ppo step)
+    trainer_kwargs:
+      observation_history_size: 6400
+      training_interval: 1280
+      num_epochs: 5
+      batch_size: 400
+  persistent_world_model_path: ${wm_path}
+  alpha: ${mmm_progress_horizon}
+  gamma: ${learning_progress_horizon}
+  cycle_horizon: ${cycle_horizon}
+
+
+agent: 
+  _target_: zfa_rl_agent.core.agent.PPO.rPPO.PPO
+  policy: MultiModalPolicy
+  env: ${curiosity_environment}
+  device: ${training_device}
+  learning_rate: ${learning_rate}
+  verbose: 1
+  n_steps: ${n_steps}
+  batch_size: ${batch_size}
+  n_epochs: ${n_epochs}
+  ent_coef: 0.0
+  vf_coef: ${vf_coef}
+  tensorboard_log: ${tb_log_dir}
+  policy_kwargs:
+    net_arch: [128, 64]
+    #activation_fn: torch.nn.Tanh
+    features_extractor_kwargs:  
+      cnn_output_dim: ${cnn_output_dim}
+      mlp_output_dim: ${mlp_output_dim}
+      net_arch: [64, 64]
+      flow: ${use_flow}
+
+load_agent:
+  _target_: zfa_rl_agent.core.agent.PPO.rPPO.PPO.load
+  path: ${policy_path}
+  env: ${curiosity_environment}
+  learning_rate: ${learning_rate}
+  device: ${training_device}
+  verbose: 1
+  n_steps: ${n_steps}
+  batch_size: ${batch_size}
+  n_epochs: ${n_epochs}
+  ent_coef: 0.0
+  vf_coef: ${vf_coef}
+  tensorboard_log: ${tb_log_dir}
+  policy_kwargs:
+    net_arch: [128, 64]
+    #activation_fn: torch.nn.Tanh
+    features_extractor_kwargs:  
+      cnn_output_dim: ${cnn_output_dim}
+      mlp_output_dim: ${mlp_output_dim}
+      net_arch: [64, 64]
+      flow: ${use_flow}
+
+checkpoint_callback:
+  _target_: stable_baselines3.common.callbacks.CheckpointCallback
+  save_freq: ${checkpoint_freq}
+  save_path: ${checkpoint_path}
+  name_prefix: ${run_name}
+  save_replay_buffer: true
+  save_vecnormalize: false
+
+wm_checkpoint_callback:
+  _target_: zfa_rl_agent.core.utils.callbacks.ModelCheckpointCallback
+  save_freq: ${checkpoint_freq}
+  save_path: ${wm_checkpoint_path}
+  name_prefix: ${run_name}
+
+hydra:
+  run:
+    dir: ${log_dir}/${run_name}/hydra
+  job_logging:
+    root:
+      level: INFO
+      handlers: [file, console]
+    handlers:
+      console:
+        class: logging.StreamHandler
+        level: WARNING
+        formatter: simple
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        level: DEBUG
+        formatter: simple
+        filename: ${hydra.run.dir}/hydra.log
+    formatters:
+      simple:
+        format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  sweep:
+    dir: ${log_dir}/${run_name}/hydra_sweep

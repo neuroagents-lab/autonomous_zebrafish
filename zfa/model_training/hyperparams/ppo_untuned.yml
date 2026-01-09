@@ -1,0 +1,35 @@
+# === Unity Mujoco Envs ===
+# untuned, taken from Swimmer-v3 (and can be used by other environments via <<: *unity-defaults)
+common_swimmer3_novision_unity: &unity-defaults
+  normalize: true
+  policy: 'MlpPolicy'
+  gamma: 0.9999
+  n_envs: 4
+  n_steps: 1024
+  batch_size: 256
+  learning_rate: !!float 6e-4
+  gae_lambda: 0.98
+  policy_kwargs: "dict(
+                       net_arch=dict(pi=[256, 256], vf=[256, 256])
+                       )"
+
+# reward is just to move forward in x, only needs 1e6 steps max
+moveforward_swimmer3_novision_unity:
+  <<: *unity-defaults
+  n_timesteps: !!float 1e6
+
+# reward based 0 to 1 penalty to move
+swimmer3_novision_unity:
+  <<: *unity-defaults
+  n_timesteps: !!float 5e6
+
+# reward based 0 to 1 penalty to move
+swimmer4_limitedjoint_novision_unity:
+  <<: *unity-defaults
+  n_timesteps: !!float 5e6
+
+# reward is just to move forward in x, only needs 1e6 steps max
+moveforward_swimmer4_limitedjoint_novision_unity:
+  <<: *unity-defaults
+  n_timesteps: !!float 1e6
+
