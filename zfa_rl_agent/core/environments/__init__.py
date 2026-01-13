@@ -1,0 +1,2 @@
+from zfa_rl_agent.core.environments.curiosity_venv_wrapper import curiosity_venv
+from zfa_rl_agent.core.environments.zebrafish import swimmer_venv

@@ -1,0 +1,129 @@
+total_timesteps: 3000000
+parallel: true
+use_ray: false
+n_train_envs: 64
+n_eval_envs: 1
+seed: 1234
+n_frames: 2 # DO NOT MODIFY
+n_steps: 2048
+batch_mod: 512
+batch_size: ${eval:'${n_steps} * ${n_train_envs} // ${batch_mod}'} 
+name: swim
+force_magnitude: 0.0
+cnn_output_dim: 256
+mlp_output_dim: 64
+action_dim: 5
+feature_dim: ${eval:'${cnn_output_dim} + ${mlp_output_dim} + 25'}
+reward_type: progress
+ir_scale: 0.0
+er_scale: 1.0
+learning_rate: 0.0001
+n_epochs: 3
+use_flow: false
+vf_coef: 0.5
+model_path: /data/user_data/rdkeller/rl_training_logs/zfa_3e-4_1024_256_5E_lstm_ent0.0_vf0.5_separate-2025-02-19_21-04-15/checkpoints/zfa_3e-4_1024_256_5E_lstm_ent0.0_vf0.5_separate-2025-02-19_21-04-15_15195136_steps.zip
+
+env_name: zebrafish
+run_name: ${name}-${now:%Y-%m-%d_%H-%M-%S}
+log_dir: /data/user_data/rdkeller/rl_training_logs
+log_subdir: ${log_dir}/${run_name} 
+checkpoint_path: ${log_subdir}/checkpoints
+tb_log_dir: ${log_subdir}/tensorboard
+monitor_dir: ${log_subdir}/monitor
+best_model_path: ${log_subdir}/best_model
+eval_path: ${log_subdir}/eval_logs
+
+eval_freq: 1000000
+n_eval_episodes: 20
+checkpoint_save_freq: 1000000
+
+base_environment:
+  _target_: zfa_rl_agent.core.environments.zebrafish.swimmer_venv
+  parallel: ${parallel}
+  use_ray: ${use_ray}
+  n_envs: ${n_train_envs}
+  seed: ${seed}
+  monitor_dir: ${monitor_dir}
+  n_frames: ${n_frames}
+  force_magnitude: ${force_magnitude}
+  training: true
+
+curiosity_environment:
+  _target_: zfa_rl_agent.core.environments.curiosity_venv_wrapper.curiosity_venv
+  venv: ${base_environment}
+  feature_size: ${feature_dim}
+  action_size: ${action_dim}
+  world_model_kwargs: 
+    net_arch:
+      - 512 
+      - 512
+    lr: 0.001
+  curiosity_env_kwargs:
+    add_stoch: false
+    reward_type: ${reward_type}
+    scale_task_reward: ${er_scale}
+    scale_surrogate_reward: ${ir_scale}
+    exploration_reward_min_step: 10000
+    trainer_kwargs:
+      observation_history_size: 10000
+      training_interval: 1000
+      num_epochs: 3
+      batch_size: 500
+
+agent: 
+  _target_: zfa_rl_agent.core.agent.PPO.rPPO.PPO.load
+  path: ${model_path}
+  env: ${curiosity_environment}
+
+eval_environment:
+  _target_: zfa_rl_agent.core.environments.zebrafish.swimmer_venv
+  parallel: false
+  use_ray: ${use_ray}
+  n_envs: ${n_eval_envs}
+  seed: ${seed}
+  monitor_dir: ${monitor_dir}
+  n_frames: ${n_frames}
+  force_magnitude: ${force_magnitude}
+  training: true
+  
+eval_callback:
+  _target_: stable_baselines3.common.callbacks.EvalCallback
+  eval_env: ${eval_environment}
+  eval_freq: ${eval:'${eval_freq} // 64'}
+  n_eval_episodes: ${n_eval_episodes}
+  log_path: ${eval_path}
+  best_model_save_path: ${best_model_path}
+  render: false
+  warn: true
+
+checkpoint_callback:
+  _target_: stable_baselines3.common.callbacks.CheckpointCallback
+  save_freq: ${eval:'${checkpoint_save_freq} // 64'}
+  save_path: ${checkpoint_path}
+  name_prefix: ${run_name}
+  save_replay_buffer: true
+  save_vecnormalize: false
+
+hydra:
+  run:
+    dir: ${log_dir}/${run_name}/hydra
+  job_logging:
+    root:
+      level: INFO
+      handlers: [file, console]
+    handlers:
+      console:
+        class: logging.StreamHandler
+        level: WARNING
+        formatter: simple
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        level: DEBUG
+        formatter: simple
+        filename: ${hydra.run.dir}/hydra.log
+    formatters:
+      simple:
+        format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  sweep:
+    dir: ${log_dir}/${run_name}/hydra_sweep
